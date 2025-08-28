@@ -30,11 +30,6 @@ type SignTxResponse struct {
 }
 
 func (s *Server) SignTransaction(response http.ResponseWriter, request *http.Request) {
-	// check allowed methods
-	if ok := allowedMethods(response, request, http.MethodPost); !ok {
-		return
-	}
-
 	// parse and validate request JSON
 	requestJSON, ok := parseRequestJSON[SignTxRequest](response, request)
 	if !ok {

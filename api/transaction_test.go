@@ -33,14 +33,6 @@ func doRawReq(t *testing.T, handler http.HandlerFunc, method, target string, bod
 	return rr
 }
 
-func TestSignTransaction_MethodNotAllowed(t *testing.T) {
-	srv := newTestServer(t)
-	rr := doRawReq(t, srv.SignTransaction, http.MethodGet, "/api/v0/sign-tx", nil)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rr.Code)
-	}
-}
-
 func TestSignTransaction_InvalidJSON(t *testing.T) {
 	srv := newTestServer(t)
 	// invalid JSON body
@@ -54,7 +46,7 @@ func TestSignTransaction_ValidationError(t *testing.T) {
 	srv := newTestServer(t)
 	// missing deviceId
 	body := map[string]any{"deviceId": " ", "data": "hello"}
-	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", body)
+	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", nil, body)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -68,7 +60,7 @@ func TestSignTransaction_ValidationError(t *testing.T) {
 func TestSignTransaction_DeviceNotFound(t *testing.T) {
 	srv := newTestServer(t)
 	body := SignTxRequest{DeviceID: "does-not-exist", Data: "payload"}
-	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", body)
+	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", nil, body)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
@@ -94,7 +86,7 @@ func TestSignTransaction_SignDataFailure(t *testing.T) {
 	}
 
 	body := SignTxRequest{DeviceID: dev.GetIDStr(), Data: "payload"}
-	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", body)
+	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", nil, body)
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -117,7 +109,7 @@ func TestSignTransaction_Success(t *testing.T) {
 	}
 
 	body := SignTxRequest{DeviceID: dev.GetIDStr(), Data: "hello-world"}
-	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", body)
+	rr := doJSONReq(t, srv.SignTransaction, http.MethodPost, "/api/v0/sign-tx", nil, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}

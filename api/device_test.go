@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +51,7 @@ func newTestServer(t *testing.T) *Server {
 	})
 }
 
-func doJSONReq(t *testing.T, handler http.HandlerFunc, method, target string, body any) *httptest.ResponseRecorder {
+func doJSONReq(t *testing.T, handler http.HandlerFunc, method, target string, url *string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var rdr io.Reader
 	if body != nil {
@@ -60,17 +61,25 @@ func doJSONReq(t *testing.T, handler http.HandlerFunc, method, target string, bo
 		}
 		rdr = bytes.NewReader(b)
 	}
-	req := httptest.NewRequest(method, target, rdr)
+	var reqUrl string
+	if url != nil {
+		reqUrl = *url
+	} else {
+		reqUrl = target
+	}
+	req := httptest.NewRequest(method, reqUrl, rdr)
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+	mux := http.NewServeMux()
+	mux.Handle(fmt.Sprintf("%s %s", method, target), handler)
+	mux.ServeHTTP(rr, req)
 	return rr
 }
 
 func TestCreateSignatureDevice_Success_RSA(t *testing.T) {
 	srv := newTestServer(t)
 	body := CreateSignatureDeviceRequest{Algorithm: crypto.RSA, Label: "device-rsa"}
-	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", body)
+	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", nil, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -88,7 +97,7 @@ func TestCreateSignatureDevice_Success_RSA(t *testing.T) {
 func TestCreateSignatureDevice_Success_ECC(t *testing.T) {
 	srv := newTestServer(t)
 	body := CreateSignatureDeviceRequest{Algorithm: crypto.ECC, Label: "device-ecc"}
-	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", body)
+	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", nil, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -97,7 +106,7 @@ func TestCreateSignatureDevice_Success_ECC(t *testing.T) {
 func TestCreateSignatureDevice_ValidateError_InvalidAlgorithm(t *testing.T) {
 	srv := newTestServer(t)
 	body := map[string]any{"algorithm": "OTHER", "label": "x"}
-	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", body)
+	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", nil, body)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -125,7 +134,7 @@ func TestCreateSignatureDevice_KeyGenFailure(t *testing.T) {
 		DeviceStore:       store,
 	})
 	body := CreateSignatureDeviceRequest{Algorithm: crypto.RSA, Label: "x"}
-	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", body)
+	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", nil, body)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -141,7 +150,7 @@ func TestCreateSignatureDevice_DeviceStoreAddFailure(t *testing.T) {
 	fs := &failingStore{}
 	srv := NewServer(ServerParams{KeyGeneratorStore: kg, SignerStore: ss, DeviceStore: fs})
 	body := CreateSignatureDeviceRequest{Algorithm: crypto.RSA, Label: "x"}
-	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", body)
+	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodPost, "/api/v0/signature-device", nil, body)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -149,22 +158,6 @@ func TestCreateSignatureDevice_DeviceStoreAddFailure(t *testing.T) {
 	_ = json.Unmarshal(rr.Body.Bytes(), &erresp)
 	if len(erresp.Errors) == 0 || !strings.Contains(erresp.Errors[0], "Unable to save signature device") {
 		t.Fatalf("unexpected error response: %+v", erresp)
-	}
-}
-
-func TestCreateSignatureDevice_MethodNotAllowed(t *testing.T) {
-	srv := newTestServer(t)
-	rr := doJSONReq(t, srv.CreateSignatureDevice, http.MethodGet, "/api/v0/signature-device", nil)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rr.Code)
-	}
-}
-
-func TestSignatureDeviceRouter_MethodNotAllowed(t *testing.T) {
-	srv := newTestServer(t)
-	rr := doJSONReq(t, srv.SignatureDeviceRouter, http.MethodPut, "/api/v0/signature-device", nil)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rr.Code)
 	}
 }
 
@@ -180,7 +173,7 @@ func TestListSignatureDevices_Success(t *testing.T) {
 			t.Fatalf("add: %v", err)
 		}
 	}
-	rr := doJSONReq(t, srv.ListSignatureDevices, http.MethodGet, "/api/v0/signature-device", nil)
+	rr := doJSONReq(t, srv.ListSignatureDevices, http.MethodGet, "/api/v0/signature-device", nil, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -204,14 +197,6 @@ func TestListSignatureDevices_Success(t *testing.T) {
 	}
 }
 
-func TestListSignatureDevices_MethodNotAllowed(t *testing.T) {
-	srv := newTestServer(t)
-	rr := doJSONReq(t, srv.ListSignatureDevices, http.MethodPost, "/api/v0/signature-device", nil)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rr.Code)
-	}
-}
-
 func TestGetSignatureDevice_Success(t *testing.T) {
 	srv := newTestServer(t)
 	dev, err := domain.NewSignatureDevice(srv.keyGeneratorStore, srv.signerStore, crypto.RSA, "lbl")
@@ -222,7 +207,7 @@ func TestGetSignatureDevice_Success(t *testing.T) {
 		t.Fatalf("add: %v", err)
 	}
 	url := "/api/v0/signature-device/" + dev.GetIDStr()
-	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodGet, url, nil)
+	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodGet, "/api/v0/signature-device/{id}", &url, nil)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
@@ -230,7 +215,7 @@ func TestGetSignatureDevice_Success(t *testing.T) {
 
 func TestGetSignatureDevice_MissingID(t *testing.T) {
 	srv := newTestServer(t)
-	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodGet, "/api/v0/signature-device/", nil)
+	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodGet, "/api/v0/signature-device/", nil, nil)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
@@ -243,16 +228,9 @@ func TestGetSignatureDevice_MissingID(t *testing.T) {
 
 func TestGetSignatureDevice_NotFound(t *testing.T) {
 	srv := newTestServer(t)
-	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodGet, "/api/v0/signature-device/doesnotexist", nil)
+	url := "/api/v0/signature-device/doesnotexist"
+	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodGet, "/api/v0/signature-device/{id}", &url, nil)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
-	}
-}
-
-func TestGetSignatureDevice_MethodNotAllowed(t *testing.T) {
-	srv := newTestServer(t)
-	rr := doJSONReq(t, srv.GetSignatureDevice, http.MethodPost, "/api/v0/signature-device/anything", nil)
-	if rr.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected 405, got %d", rr.Code)
 	}
 }

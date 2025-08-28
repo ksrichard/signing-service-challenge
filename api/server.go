@@ -47,10 +47,11 @@ func NewServer(params ServerParams) *Server {
 func (s *Server) Run() error {
 	mux := http.NewServeMux()
 
-	mux.Handle("/api/v0/health", http.HandlerFunc(s.Health))
-	mux.Handle("/api/v0/signature-device", http.HandlerFunc(s.SignatureDeviceRouter))
-	mux.Handle("/api/v0/signature-device/", http.HandlerFunc(s.GetSignatureDevice))
-	mux.Handle("/api/v0/sign-tx", http.HandlerFunc(s.SignTransaction))
+	mux.Handle("GET /api/v0/health", http.HandlerFunc(s.Health))
+	mux.Handle("POST /api/v0/signature-device", http.HandlerFunc(s.CreateSignatureDevice))
+	mux.Handle("GET /api/v0/signature-device", http.HandlerFunc(s.ListSignatureDevices))
+	mux.Handle("GET /api/v0/signature-device/{id}", http.HandlerFunc(s.GetSignatureDevice))
+	mux.Handle("POST /api/v0/sign-tx", http.HandlerFunc(s.SignTransaction))
 
 	return http.ListenAndServe(s.listenAddress, mux)
 }

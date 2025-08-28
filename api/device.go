@@ -32,28 +32,8 @@ type CreateSignatureDeviceResponse struct {
 	ID string `json:"id"`
 }
 
-// SignatureDeviceRouter handles requests to the signature device endpoint.
-// It includes the CreateSignatureDevice and ListSignatureDevices methods.
-func (s *Server) SignatureDeviceRouter(response http.ResponseWriter, request *http.Request) {
-	switch request.Method {
-	case http.MethodPost:
-		s.CreateSignatureDevice(response, request)
-	case http.MethodGet:
-		s.ListSignatureDevices(response, request)
-	default:
-		WriteErrorResponse(response, http.StatusMethodNotAllowed, []string{
-			http.StatusText(http.StatusMethodNotAllowed),
-		})
-	}
-}
-
 // CreateSignatureDevice creates a new signature device.
 func (s *Server) CreateSignatureDevice(response http.ResponseWriter, request *http.Request) {
-	// check allowed methods
-	if ok := allowedMethods(response, request, http.MethodPost); !ok {
-		return
-	}
-
 	// parse and validate request JSON
 	requestJSON, ok := parseRequestJSON[CreateSignatureDeviceRequest](response, request)
 	if !ok {
@@ -101,11 +81,6 @@ type signatureDevice struct {
 
 // ListSignatureDevices lists all signature devices.
 func (s *Server) ListSignatureDevices(response http.ResponseWriter, request *http.Request) {
-	// check allowed methods
-	if ok := allowedMethods(response, request, http.MethodGet); !ok {
-		return
-	}
-
 	// list devices
 	devices, err := s.deviceStore.List()
 	if err != nil {
@@ -132,15 +107,8 @@ func (s *Server) ListSignatureDevices(response http.ResponseWriter, request *htt
 
 // GetSignatureDevice returns a single signature device.
 func (s *Server) GetSignatureDevice(response http.ResponseWriter, request *http.Request) {
-	// check allowed methods
-	if ok := allowedMethods(response, request, http.MethodGet); !ok {
-		return
-	}
-
-	// get device id from path
-	// this is a quick hack that would be much nicer with Go version 1.22+ using path parameters
-	id := strings.TrimPrefix(request.URL.Path, "/api/v0/signature-device/")
-	if strings.ReplaceAll(id, " ", "") == "" {
+	id := request.PathValue("id")
+	if strings.TrimSpace(id) == "" {
 		WriteErrorResponse(response, http.StatusBadRequest, []string{
 			"id is required",
 		})
